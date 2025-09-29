@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spine Industry Scraper</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .status-card {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 5px solid #3498db;
+        }
+        .status-running {
+            border-left-color: #f39c12;
+            background: #fef9e7;
+        }
+        .status-completed {
+            border-left-color: #27ae60;
+            background: #e8f5e8;
+        }
+        .status-error {
+            border-left-color: #e74c3c;
+            background: #fde2e2;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .results-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .sample-data {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .log {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦴 Spine Industry Scraper Server</h1>
+
+        <div id="statusCard" class="status-card">
+            <h3>Status: <span id="statusText">Ready</span></h3>
+            <div id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p>Progress: <span id="progressText">0%</span></p>
+            </div>
+            <p>Articles Scraped: <span id="articlesCount">0</span></p>
+            <p>Current Website: <span id="currentWebsite">None</span></p>
+        </div>
+
+        <div class="container">
+            <button id="startBtn" class="btn" onclick="startScraping()">🚀 Start Scraping</button>
+            <button id="stopBtn" class="btn btn-danger" onclick="stopScraping()" disabled>⏹️ Stop Scraping</button>
+            <button class="btn" onclick="refreshStatus()">🔄 Refresh Status</button>
+        </div>
+
+        <div id="resultsSection" class="results-section" style="display: none;">
+            <h3>📊 Latest Results</h3>
+            <div id="resultsContent">
+                <p>Loading results...</p>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>📋 Activity Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let statusInterval;
+        let logsInterval;
+
+        function startScraping() {
+            $.ajax({
+                url: '/api/scrape',
+                method: 'POST',
+                success: function(response) {
+                    $('#startBtn').prop('disabled', true);
+                    $('#stopBtn').prop('disabled', false);
+                    clearLogs();
+                    addLog('🚀 Scraping started...');
+                    startStatusPolling();
+                    startLogsPolling();
+                },
+                error: function(xhr) {
+                    addLog('❌ Failed to start scraping: ' + xhr.responseJSON?.message || xhr.responseText);
+                }
+            });
+        }
+
+        function stopScraping() {
+            $.ajax({
+                url: '/api/stop',
+                method: 'POST',
+                success: function(response) {
+                    $('#startBtn').prop('disabled', false);
+                    $('#stopBtn').prop('disabled', true);
+                    addLog('⏹️ Scraping stopped by user');
+                    stopStatusPolling();
+                    stopLogsPolling();
+                }
+            });
+        }
+
+        function startStatusPolling() {
+            if (statusInterval) clearInterval(statusInterval);
+            statusInterval = setInterval(updateStatus, 1000);
+        }
+
+        function stopStatusPolling() {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+        }
+
+        function startLogsPolling() {
+            if (logsInterval) clearInterval(logsInterval);
+            logsInterval = setInterval(updateLogs, 2000);
+        }
+
+        function stopLogsPolling() {
+            if (logsInterval) {
+                clearInterval(logsInterval);
+                logsInterval = null;
+            }
+        }
+
+        function updateStatus() {
+            $.get('/api/status', function(data) {
+                const status = data.status;
+                const logs = data.logs || [];
+
+                // Update status card
+                const statusCard = $('#statusCard');
+                statusCard.removeClass('status-running status-completed status-error');
+
+                if (status.is_running) {
+                    statusCard.addClass('status-running');
+                    $('#statusText').text('Running');
+                    $('#startBtn').prop('disabled', true);
+                    $('#stopBtn').prop('disabled', false);
+                } else if (status.error) {
+                    statusCard.addClass('status-error');
+                    $('#statusText').text('Error');
+                    $('#startBtn').prop('disabled', false);
+                    $('#stopBtn').prop('disabled', true);
+                } else if (status.articles_scraped > 0) {
+                    statusCard.addClass('status-completed');
+                    $('#statusText').text('Completed');
+                    $('#startBtn').prop('disabled', false);
+                    $('#stopBtn').prop('disabled', true);
+                    stopStatusPolling();
+                    stopLogsPolling();
+                } else {
+                    $('#statusText').text('Ready');
+                    $('#startBtn').prop('disabled', false);
+                    $('#stopBtn').prop('disabled', true);
+                }
+
+                // Update progress
+                $('#progressFill').css('width', status.progress + '%');
+                $('#progressText').text(status.progress + '%');
+                $('#articlesCount').text(status.articles_scraped);
+                $('#currentWebsite').text(status.current_website || 'None');
+
+                // Add any new logs from status response
+                logs.forEach(log => {
+                    if (!getExistingLogs().includes(log)) {
+                        addLogFromServer(log);
+                    }
+                });
+
+                // Load results if completed
+                if (!status.is_running && status.articles_scraped > 0) {
+                    loadResults();
+                }
+            }).fail(function(xhr) {
+                console.error('Failed to get status:', xhr);
+            });
+        }
+
+        function updateLogs() {
+            $.get('/api/logs', function(data) {
+                const newLogs = data.logs || [];
+                const existingLogs = getExistingLogs();
+
+                newLogs.forEach(log => {
+                    if (!existingLogs.includes(log)) {
+                        addLogFromServer(log);
+                    }
+                });
+            }).fail(function(xhr) {
+                console.error('Failed to get logs:', xhr);
+            });
+        }
+
+        function getExistingLogs() {
+            const logContainer = $('#log');
+            const logs = [];
+            logContainer.children('div').each(function() {
+                logs.push($(this).text());
+            });
+            return logs;
+        }
+
+        function addLogFromServer(logMessage) {
+            // Only add if not already present
+            const logContainer = $('#log');
+            const lastLog = logContainer.children('div').last();
+            if (!lastLog || lastLog.text() !== logMessage) {
+                logContainer.append('<div>' + logMessage + '</div>');
+                logContainer.scrollTop(logContainer[0].scrollHeight);
+            }
+        }
+
+        function loadResults() {
+            $.get('/api/results', function(data) {
+                if (data.error) {
+                    $('#resultsContent').html('<p>❌ ' + data.error + '</p>');
+                } else {
+                    let html = '<h4>📄 Latest File: ' + data.file + '</h4>';
+                    html += '<p>Total Lines: ' + data.total_lines + '</p>';
+                    html += '<h5>📋 CSV Header:</h5>';
+                    html += '<div class="sample-data">' + data.header + '</div>';
+                    html += '<h5>📊 Sample Data:</h5>';
+                    data.sample_data.forEach(line => {
+                        html += '<div class="sample-data">' + line + '</div>';
+                    });
+                    $('#resultsContent').html(html);
+                }
+                $('#resultsSection').show();
+            }).fail(function() {
+                $('#resultsContent').html('<p>❌ Failed to load results</p>');
+                $('#resultsSection').show();
+            });
+        }
+
+        function refreshStatus() {
+            updateStatus();
+            addLog('🔄 Status refreshed');
+        }
+
+        function clearLogs() {
+            $('#log').empty();
+        }
+
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = '[' + timestamp + '] ' + message;
+            $('#log').append('<div>' + logEntry + '</div>');
+            $('#log').scrollTop($('#log')[0].scrollHeight);
+        }
+
+        // Initial status update
+        $(document).ready(function() {
+            updateStatus();
+            startLogsPolling();
+            addLog('🌐 Spine Industry Scraper Server started');
+            addLog('💡 Ready to scrape spine industry websites');
+        });
+    </script>
+</body>
+</html>
