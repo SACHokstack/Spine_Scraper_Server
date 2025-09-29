@@ -279,34 +279,6 @@ Modify `headless_spine_scraper.py` to adjust:
 - Content extraction rules
 - Output data structure
 
-## Production Deployment
-
-### For Production Use:
-1. Set `debug=False` in app.py
-2. Use a production WSGI server like Gunicorn
-3. Set up proper logging configuration
-4. Configure firewall and security settings
-5. Set up process monitoring
-
-### Example Production Setup:
-```bash
-# Install production server
-pip install gunicorn
-
-# Run with Gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
-
-# Or use the startup script
-python run_server.py
-```
-
-## System Requirements
-
-- **Python**: 3.8 or higher
-- **Google Chrome**: Latest stable version
-- **Memory**: 2GB+ RAM recommended
-- **Storage**: 1GB+ free space for data storage
-- **Network**: Stable internet connection
 
 ## API Rate Limits
 
